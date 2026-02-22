@@ -1,0 +1,14 @@
+[project]
+name = "streamlit-dashboard-app"
+version = "0.1.0"
+description = "Streamlit dashboard builder with reusable dashboard templates (uv-managed)."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+  "streamlit>=1.32",
+  "pandas>=2.0",
+  "plotly>=5.18",
+]
+
+[tool.uv]
+# Keep this project lightweight; no build backend is needed since we run it as an app.

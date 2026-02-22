@@ -1,0 +1,31 @@
+[
+  {
+    "id": "756fe5e9-dd52-4e2d-99e8-383df9004192",
+    "name": "hum",
+    "created_at": "2026-02-22T17:34:30.284464Z",
+    "plots": [
+      {
+        "id": "f59933b8-79d2-43c2-8cdd-9453e906e46f",
+        "title": null,
+        "x_col": "time",
+        "y_cols": [
+          "streamflow"
+        ],
+        "y2_cols": [],
+        "plot_type": "Line",
+        "template": "plotly_white",
+        "yaxis_title_1": null,
+        "yaxis_title_2": null,
+        "color_col": null,
+        "agg": null,
+        "series_style": {
+          "streamflow": {
+            "color": "#5c4287",
+            "width": 1,
+            "dash": "solid"
+          }
+        }
+      }
+    ]
+  }
+]
