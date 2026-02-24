@@ -809,7 +809,9 @@ m4.metric("Memory (approx.)", f"{df.memory_usage(deep=True).sum() / (1024**2):.1
 
 st.divider()
 
-tabs = st.tabs(["🔎 Preview", "🛠️ Plot Builder", "🧩 Dashboard", "⚙️ Templates"])
+tabs = st.tabs(
+    ["🔎 Preview", "🛠️ Plot Builder", "🧩 Dashboard", "⚖️ Compare (2 CSVs)", "⚙️ Templates"]
+)
 
 # -------------------- Preview tab -------------------- #
 with tabs[0]:
@@ -1088,59 +1090,58 @@ with tabs[1]:
 with tabs[2]:
     st.markdown("#### Dashboard")
     st.caption(
-        "Select an active template in the sidebar. The dashboard re-renders on the current dataset."
+        "Select one or more saved plot configs. Each selected config renders on the current dataset."
     )
 
-    active_id = st.session_state.get("active_dashboard_id")
     configs = st.session_state["saved_configs"]
-    cfg = (
-        next((c for c in configs if c.get("id") == active_id), None)
-        if active_id
-        else None
-    )
-
-    if not cfg:
-        st.info(
-            "No active template selected. Choose one in the sidebar, or create one in **Plot Builder**."
-        )
+    if not configs:
+        st.info("No saved plot configs yet. Build one in **Plot Builder** and save it.")
     else:
-        st.markdown(
-            f"""
-            <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
-              <div style="font-size:18px; font-weight:700;">{cfg.get("name", "Unnamed")}</div>
-              <div style="opacity:0.8; font-size:12px;">Created: {cfg.get("created_at", "")}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
+        ordered = sorted(configs, key=lambda c: (c.get("name") or "").lower())
+        id_to_cfg = {c.get("id"): c for c in ordered}
+        cfg_options = [c.get("id") for c in ordered]
+
+        active_id = st.session_state.get("active_dashboard_id")
+        default_selected = [active_id] if active_id in cfg_options else cfg_options[:1]
+        selected_cfg_ids = st.multiselect(
+            "Plot configs to display",
+            options=cfg_options,
+            default=default_selected,
+            format_func=lambda v: id_to_cfg.get(v, {}).get("name", "Unnamed"),
         )
 
-        plots = cfg.get("plots") or []
-        if not plots:
-            st.warning("This template contains no plots.")
+        if selected_cfg_ids:
+            st.session_state["active_dashboard_id"] = selected_cfg_ids[0]
+
+        if not selected_cfg_ids:
+            st.info("Select at least one plot config.")
         else:
             # Optional global date parsing + filtering for dashboard
             st.divider()
             with st.expander("Global dashboard options", expanded=False):
-                date_col = st.selectbox(
+                date_col_dash = st.selectbox(
                     "Date/time column for dashboard (optional)",
                     options=[None] + cols,
                     index=0
                     if date_guess is None
                     else ([None] + cols).index(date_guess),
                 )
-                dayfirst = st.toggle(
+                dayfirst_dash = st.toggle(
                     "Day-first dates", value=False, key="dash_dayfirst"
                 )
-                date_format = st.text_input(
+                date_format_dash = st.text_input(
                     "Optional date format", value="", key="dash_dateformat"
                 )
                 dash_df = parse_dates_flexible(
-                    df, date_col, dayfirst=dayfirst, date_format=(date_format or None)
+                    df,
+                    date_col_dash,
+                    dayfirst=dayfirst_dash,
+                    date_format=(date_format_dash or None),
                 )
 
                 dash_filtered = dash_df
-                if date_col and date_col in dash_df.columns:
-                    dt = dash_df[date_col]
+                if date_col_dash and date_col_dash in dash_df.columns:
+                    dt = dash_df[date_col_dash]
                     if pd.api.types.is_datetime64_any_dtype(dt):
                         valid_dt = dt.dropna()
                         if not valid_dt.empty:
@@ -1153,8 +1154,8 @@ with tabs[2]:
                                 key="dash_dateslider",
                             )
                             dash_filtered = dash_df[
-                                (dash_df[date_col] >= r[0])
-                                & (dash_df[date_col] <= r[1])
+                                (dash_df[date_col_dash] >= r[0])
+                                & (dash_df[date_col_dash] <= r[1])
                             ]
                 # store
                 st.session_state["dash_df_filtered"] = dash_filtered
@@ -1162,32 +1163,272 @@ with tabs[2]:
             dash_filtered = st.session_state.get("dash_df_filtered", df)
             available_cols = list(dash_filtered.columns)
 
-            # Render plots in a modern card-like layout
-            for i, spec in enumerate(plots, start=1):
+            # Render one plot per selected plotting-config.
+            for cfg_id in selected_cfg_ids:
+                cfg = id_to_cfg.get(cfg_id)
+                if not cfg:
+                    continue
+
                 with st.container(border=True):
-                    title = spec.get("title") or f"Plot {i}"
-                    st.markdown(f"**{title}**")
-                    fig, warns = render_plot_from_spec(
-                        dash_filtered, spec, available_cols
+                    st.markdown(
+                        f"""
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+                          <div style="font-size:18px; font-weight:700;">{cfg.get("name", "Unnamed")}</div>
+                          <div style="opacity:0.8; font-size:12px;">Created: {cfg.get("created_at", "")}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
                     )
+
+                    plots = cfg.get("plots") or []
+                    if not plots:
+                        st.warning("This config contains no plots.")
+                        continue
+
+                    spec = plots[0]
+                    fig, warns = render_plot_from_spec(dash_filtered, spec, available_cols)
                     if warns:
-                        with st.expander("Column resolution warnings", expanded=False):
+                        with st.expander(
+                            f"Column resolution warnings - {cfg.get('name', 'Unnamed')}",
+                            expanded=False,
+                        ):
                             for w in warns:
                                 st.warning(w)
                             st.caption(
                                 "Tip: You can fix this by editing the template JSON in the Templates tab."
                             )
                     if fig is not None:
-                        # Unique per rendered dashboard plot
-                        cfg_id = (cfg or {}).get("id", "cfg")
-                        st.plotly_chart(
-                            fig, width="stretch", key=f"dash_plot_{cfg_id}_{i}"
-                        )
+                        st.plotly_chart(fig, width="stretch", key=f"dash_plot_{cfg_id}")
                     else:
                         st.error("Could not render this plot on the current dataset.")
 
-# -------------------- Templates tab -------------------- #
+# -------------------- Compare tab -------------------- #
 with tabs[3]:
+    st.markdown("#### Compare (2 CSVs)")
+    st.caption(
+        "Load two CSVs and compare selected saved plot configs side by side."
+    )
+
+    cmp_left, cmp_right = st.columns(2, vertical_alignment="top")
+    with cmp_left:
+        st.markdown("##### Dataset A")
+        cmp_up_a = st.file_uploader("Upload CSV A", type=["csv"], key="cmp_up_a")
+        cmp_path_a = st.text_input(
+            "…or path A on server",
+            value="",
+            key="cmp_path_a",
+            help="If Streamlit runs where the file exists, you can provide a filesystem path.",
+        )
+    with cmp_right:
+        st.markdown("##### Dataset B")
+        cmp_up_b = st.file_uploader("Upload CSV B", type=["csv"], key="cmp_up_b")
+        cmp_path_b = st.text_input(
+            "…or path B on server",
+            value="",
+            key="cmp_path_b",
+            help="If Streamlit runs where the file exists, you can provide a filesystem path.",
+        )
+
+    cmp_df_a, cmp_label_a, cmp_err_a = read_csv_input(cmp_up_a, cmp_path_a)
+    cmp_df_b, cmp_label_b, cmp_err_b = read_csv_input(cmp_up_b, cmp_path_b)
+
+    if cmp_err_a:
+        st.error(f"Could not read CSV A: {cmp_err_a}")
+    if cmp_err_b:
+        st.error(f"Could not read CSV B: {cmp_err_b}")
+
+    if cmp_df_a is None or cmp_df_b is None:
+        st.info("Provide both Dataset A and Dataset B to compare dashboards.")
+    else:
+        st.caption(
+            f"A: `{cmp_label_a or 'CSV A'}` ({len(cmp_df_a):,} rows) | "
+            f"B: `{cmp_label_b or 'CSV B'}` ({len(cmp_df_b):,} rows)"
+        )
+
+        cmp_configs = st.session_state["saved_configs"]
+        if not cmp_configs:
+            st.info("No saved plot configs yet. Create one in **Plot Builder** first.")
+        else:
+            cmp_ordered = sorted(cmp_configs, key=lambda c: (c.get("name") or "").lower())
+            cmp_id_to_cfg = {c.get("id"): c for c in cmp_ordered}
+            cmp_cfg_options = [c.get("id") for c in cmp_ordered]
+
+            cmp_active_id = st.session_state.get("active_dashboard_id")
+            cmp_default = [cmp_active_id] if cmp_active_id in cmp_cfg_options else cmp_cfg_options[:1]
+            cmp_selected_cfg_ids = st.multiselect(
+                "Plot configs to compare",
+                options=cmp_cfg_options,
+                default=cmp_default,
+                format_func=lambda v: cmp_id_to_cfg.get(v, {}).get("name", "Unnamed"),
+                key="cmp_selected_cfg_ids",
+            )
+
+            if cmp_selected_cfg_ids:
+                st.session_state["active_dashboard_id"] = cmp_selected_cfg_ids[0]
+
+            if not cmp_selected_cfg_ids:
+                st.info("Select at least one plot config to compare.")
+            else:
+                cmp_cols_union = sorted(
+                    list(set(cmp_df_a.columns).union(set(cmp_df_b.columns))),
+                    key=lambda c: str(c).lower(),
+                )
+                cmp_date_guess = st.session_state.get("read_date_col")
+                if cmp_date_guess not in cmp_cols_union:
+                    cmp_date_guess = guess_date_column([str(c) for c in cmp_cols_union])
+
+                with st.expander("Compare options", expanded=False):
+                    cmp_date_options = [None] + cmp_cols_union
+                    cmp_date_col = st.selectbox(
+                        "Shared date/time column (optional)",
+                        options=cmp_date_options,
+                        index=cmp_date_options.index(cmp_date_guess)
+                        if cmp_date_guess in cmp_date_options
+                        else 0,
+                        key="cmp_date_col",
+                    )
+                    cmp_dayfirst = st.toggle(
+                        "Day-first dates",
+                        value=bool(st.session_state.get("read_dayfirst", False)),
+                        key="cmp_dayfirst",
+                    )
+                    cmp_date_format = st.text_input(
+                        "Optional date format",
+                        value=(st.session_state.get("read_date_format", "") or ""),
+                        key="cmp_date_format",
+                    ).strip()
+
+                cmp_resolved_date_a = (
+                    resolve_column(cmp_date_col, list(cmp_df_a.columns))
+                    if cmp_date_col
+                    else None
+                )
+                cmp_resolved_date_b = (
+                    resolve_column(cmp_date_col, list(cmp_df_b.columns))
+                    if cmp_date_col
+                    else None
+                )
+
+                cmp_df_a_parsed = parse_dates_flexible(
+                    cmp_df_a,
+                    cmp_resolved_date_a,
+                    dayfirst=cmp_dayfirst,
+                    date_format=(cmp_date_format or None),
+                )
+                cmp_df_b_parsed = parse_dates_flexible(
+                    cmp_df_b,
+                    cmp_resolved_date_b,
+                    dayfirst=cmp_dayfirst,
+                    date_format=(cmp_date_format or None),
+                )
+
+                cmp_filtered_a = cmp_df_a_parsed
+                cmp_filtered_b = cmp_df_b_parsed
+
+                if (
+                    cmp_resolved_date_a
+                    and cmp_resolved_date_b
+                    and cmp_resolved_date_a in cmp_df_a_parsed.columns
+                    and cmp_resolved_date_b in cmp_df_b_parsed.columns
+                ):
+                    dt_a = cmp_df_a_parsed[cmp_resolved_date_a]
+                    dt_b = cmp_df_b_parsed[cmp_resolved_date_b]
+                    if (
+                        pd.api.types.is_datetime64_any_dtype(dt_a)
+                        and pd.api.types.is_datetime64_any_dtype(dt_b)
+                    ):
+                        valid_a = dt_a.dropna()
+                        valid_b = dt_b.dropna()
+                        if not valid_a.empty and not valid_b.empty:
+                            overlap_min = max(valid_a.min(), valid_b.min())
+                            overlap_max = min(valid_a.max(), valid_b.max())
+                            if overlap_min <= overlap_max:
+                                with st.expander("Shared date range filter", expanded=False):
+                                    cmp_range = st.slider(
+                                        "Filter shared date range",
+                                        min_value=overlap_min.to_pydatetime(),
+                                        max_value=overlap_max.to_pydatetime(),
+                                        value=(
+                                            overlap_min.to_pydatetime(),
+                                            overlap_max.to_pydatetime(),
+                                        ),
+                                        key="cmp_dateslider",
+                                    )
+                                cmp_filtered_a = cmp_df_a_parsed[
+                                    (cmp_df_a_parsed[cmp_resolved_date_a] >= cmp_range[0])
+                                    & (cmp_df_a_parsed[cmp_resolved_date_a] <= cmp_range[1])
+                                ]
+                                cmp_filtered_b = cmp_df_b_parsed[
+                                    (cmp_df_b_parsed[cmp_resolved_date_b] >= cmp_range[0])
+                                    & (cmp_df_b_parsed[cmp_resolved_date_b] <= cmp_range[1])
+                                ]
+
+                cmp_avail_a = list(cmp_filtered_a.columns)
+                cmp_avail_b = list(cmp_filtered_b.columns)
+
+                for cmp_cfg_id in cmp_selected_cfg_ids:
+                    cmp_cfg = cmp_id_to_cfg.get(cmp_cfg_id)
+                    if not cmp_cfg:
+                        continue
+
+                    cmp_plots = cmp_cfg.get("plots") or []
+                    if not cmp_plots:
+                        with st.container(border=True):
+                            st.markdown(f"**{cmp_cfg.get('name', 'Unnamed')}**")
+                            st.warning("This config contains no plots.")
+                        continue
+
+                    cmp_spec = cmp_plots[0]
+
+                    with st.container(border=True):
+                        st.markdown(f"**{cmp_cfg.get('name', 'Unnamed')}**")
+                        c_a, c_b = st.columns(2, vertical_alignment="top")
+
+                        with c_a:
+                            st.caption(f"A - {cmp_label_a or 'CSV A'}")
+                            fig_a, warns_a = render_plot_from_spec(
+                                cmp_filtered_a, cmp_spec, cmp_avail_a
+                            )
+                            if warns_a:
+                                with st.expander(
+                                    f"Warnings (A) - {cmp_cfg.get('name', 'Unnamed')}",
+                                    expanded=False,
+                                ):
+                                    for w in warns_a:
+                                        st.warning(w)
+                            if fig_a is not None:
+                                st.plotly_chart(
+                                    fig_a,
+                                    width="stretch",
+                                    key=f"cmp_plot_a_{cmp_cfg_id}",
+                                )
+                            else:
+                                st.error("Could not render this config for Dataset A.")
+
+                        with c_b:
+                            st.caption(f"B - {cmp_label_b or 'CSV B'}")
+                            fig_b, warns_b = render_plot_from_spec(
+                                cmp_filtered_b, cmp_spec, cmp_avail_b
+                            )
+                            if warns_b:
+                                with st.expander(
+                                    f"Warnings (B) - {cmp_cfg.get('name', 'Unnamed')}",
+                                    expanded=False,
+                                ):
+                                    for w in warns_b:
+                                        st.warning(w)
+                            if fig_b is not None:
+                                st.plotly_chart(
+                                    fig_b,
+                                    width="stretch",
+                                    key=f"cmp_plot_b_{cmp_cfg_id}",
+                                )
+                            else:
+                                st.error("Could not render this config for Dataset B.")
+
+
+# -------------------- Templates tab -------------------- #
+with tabs[4]:
     st.markdown("#### Templates")
     st.caption("Manage templates (rename, delete, export/import, edit JSON).")
 
