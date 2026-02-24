@@ -33,6 +33,8 @@ TEMPLATES = [
     "simple_white",
     "none",
 ]
+DEFAULT_SERIES_COLORS = px.colors.qualitative.Plotly
+
 
 # -------------------- Utilities -------------------- #
 def detect_separator_from_sample(sample: str, decimal: str = ".") -> Optional[str]:
@@ -65,7 +67,10 @@ def _flatten_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Flatten MultiIndex columns if present."""
     if isinstance(df.columns, pd.MultiIndex):
         df = df.copy()
-        df.columns = [" | ".join([str(x) for x in tup if str(x) != "nan"]).strip() for tup in df.columns]
+        df.columns = [
+            " | ".join([str(x) for x in tup if str(x) != "nan"]).strip()
+            for tup in df.columns
+        ]
     return df
 
 
@@ -91,7 +96,9 @@ def resolve_column(requested: str, available_cols: List[str]) -> Optional[str]:
     if req_norm in norm_to_actual:
         return norm_to_actual[req_norm]
 
-    candidates = difflib.get_close_matches(req_norm, list(norm_to_actual.keys()), n=1, cutoff=0.80)
+    candidates = difflib.get_close_matches(
+        req_norm, list(norm_to_actual.keys()), n=1, cutoff=0.80
+    )
     if candidates:
         return norm_to_actual[candidates[0]]
     return None
@@ -119,9 +126,13 @@ def parse_dates_flexible(
     df = df.copy()
     try:
         if date_format:
-            df[date_col] = pd.to_datetime(df[date_col], format=date_format, errors="coerce")
+            df[date_col] = pd.to_datetime(
+                df[date_col], format=date_format, errors="coerce"
+            )
         else:
-            df[date_col] = pd.to_datetime(df[date_col], dayfirst=dayfirst, errors="coerce")
+            df[date_col] = pd.to_datetime(
+                df[date_col], dayfirst=dayfirst, errors="coerce"
+            )
     except Exception:
         df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
 
@@ -188,7 +199,9 @@ def _to_numeric_safe(df: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
     return df
 
 
-def apply_axis_titles(fig, title_y1: Optional[str] = None, title_y2: Optional[str] = None):
+def apply_axis_titles(
+    fig, title_y1: Optional[str] = None, title_y2: Optional[str] = None
+):
     updates = {}
     if title_y1:
         updates["yaxis"] = dict(title=title_y1)
@@ -198,7 +211,9 @@ def apply_axis_titles(fig, title_y1: Optional[str] = None, title_y2: Optional[st
         fig.update_layout(**updates)
 
 
-def apply_series_styles(fig: go.Figure, series_style: Dict[str, Dict[str, Any]]) -> None:
+def apply_series_styles(
+    fig: go.Figure, series_style: Dict[str, Dict[str, Any]]
+) -> None:
     """Apply per-trace styling (color/width/dash) to a Plotly figure.
 
     `series_style` maps trace name (typically the column name) to style dict.
@@ -289,15 +304,50 @@ def make_figure(
     # Single axis via plotly express
     if not y2_cols:
         if plot_type == "Line":
-            fig = px.line(plot_df, x=x, y=y_cols, color=color_col, template=template if template != "none" else None, title=title)
+            fig = px.line(
+                plot_df,
+                x=x,
+                y=y_cols,
+                color=color_col,
+                template=template if template != "none" else None,
+                title=title,
+            )
         elif plot_type == "Scatter":
-            fig = px.scatter(plot_df, x=x, y=y_cols, color=color_col, template=template if template != "none" else None, title=title)
+            fig = px.scatter(
+                plot_df,
+                x=x,
+                y=y_cols,
+                color=color_col,
+                template=template if template != "none" else None,
+                title=title,
+            )
         elif plot_type == "Bar":
-            fig = px.bar(plot_df, x=x, y=y_cols, color=color_col, template=template if template != "none" else None, title=title)
+            fig = px.bar(
+                plot_df,
+                x=x,
+                y=y_cols,
+                color=color_col,
+                template=template if template != "none" else None,
+                title=title,
+            )
         elif plot_type == "Area":
-            fig = px.area(plot_df, x=x, y=y_cols, color=color_col, template=template if template != "none" else None, title=title)
+            fig = px.area(
+                plot_df,
+                x=x,
+                y=y_cols,
+                color=color_col,
+                template=template if template != "none" else None,
+                title=title,
+            )
         else:
-            fig = px.line(plot_df, x=x, y=y_cols, color=color_col, template=template if template != "none" else None, title=title)
+            fig = px.line(
+                plot_df,
+                x=x,
+                y=y_cols,
+                color=color_col,
+                template=template if template != "none" else None,
+                title=title,
+            )
         apply_axis_titles(fig, spec.get("yaxis_title_1"), None)
         apply_series_styles(fig, series_style)
         fig.update_layout(margin=dict(l=10, r=10, t=50 if title else 20, b=10))
@@ -323,7 +373,9 @@ def make_figure(
                     yaxis="y1",
                     line=dict(
                         color=style.get("color") or None,
-                        width=float(style.get("width")) if isinstance(style.get("width"), (int, float)) else None,
+                        width=float(style.get("width"))
+                        if isinstance(style.get("width"), (int, float))
+                        else None,
                         dash=style.get("dash") or None,
                     ),
                 )
@@ -364,7 +416,9 @@ def make_figure(
                     yaxis="y2",
                     line=dict(
                         color=style.get("color") or None,
-                        width=float(style.get("width")) if isinstance(style.get("width"), (int, float)) else None,
+                        width=float(style.get("width"))
+                        if isinstance(style.get("width"), (int, float))
+                        else None,
                         dash=style.get("dash") or None,
                     ),
                 )
@@ -404,7 +458,9 @@ def make_figure(
     return fig
 
 
-def render_plot_from_spec(df: pd.DataFrame, spec: Dict[str, Any], available_cols: List[str]) -> Tuple[Optional[go.Figure], List[str]]:
+def render_plot_from_spec(
+    df: pd.DataFrame, spec: Dict[str, Any], available_cols: List[str]
+) -> Tuple[Optional[go.Figure], List[str]]:
     """Resolve columns, render figure; return (fig, warnings)."""
     warnings: List[str] = []
 
@@ -446,6 +502,62 @@ def render_plot_from_spec(df: pd.DataFrame, spec: Dict[str, Any], available_cols
     return fig, warnings
 
 
+def make_column_preview_figure(
+    series: pd.Series,
+    x_series: Optional[pd.Series] = None,
+    x_label: Optional[str] = None,
+) -> Optional[go.Figure]:
+    """Create a compact preview chart for one column."""
+    try:
+        sample = series
+
+        if pd.api.types.is_numeric_dtype(sample):
+            values = pd.to_numeric(sample, errors="coerce")
+
+            if x_series is not None:
+                x_name = x_label or "x"
+                x_values = pd.to_datetime(x_series, errors="coerce")
+                plot_df = pd.DataFrame({x_name: x_values, "value": values}).dropna()
+                if not plot_df.empty:
+                    plot_df = plot_df.sort_values(by=x_name)
+                    fig = px.line(plot_df, x=x_name, y="value", template="plotly_white")
+                else:
+                    plot_df = pd.DataFrame(
+                        {"idx": range(len(values)), "value": values}
+                    ).dropna()
+                    if plot_df.empty:
+                        return None
+                    fig = px.line(plot_df, x="idx", y="value", template="plotly_white")
+            else:
+                plot_df = pd.DataFrame(
+                    {"idx": range(len(values)), "value": values}
+                ).dropna()
+                if plot_df.empty:
+                    return None
+                fig = px.line(plot_df, x="idx", y="value", template="plotly_white")
+        elif pd.api.types.is_datetime64_any_dtype(sample):
+            dt = pd.to_datetime(sample, errors="coerce").dropna()
+            if dt.empty:
+                return None
+            counts = dt.dt.date.value_counts().sort_index()
+            plot_df = counts.rename_axis("date").reset_index(name="count")
+            fig = px.line(plot_df, x="date", y="count", template="plotly_white")
+        else:
+            text = sample.astype("string").fillna("<NA>")
+            counts = text.value_counts(dropna=False).head(15)
+            if counts.empty:
+                return None
+            plot_df = counts.rename_axis("value").reset_index(name="count")
+            fig = px.bar(plot_df, x="value", y="count", template="plotly_white")
+
+        fig.update_layout(height=185, margin=dict(l=8, r=8, t=8, b=8), showlegend=False)
+        fig.update_xaxes(title=None)
+        fig.update_yaxes(title=None)
+        return fig
+    except Exception:
+        return None
+
+
 # -------------------- Session state -------------------- #
 if "saved_configs" not in st.session_state:
     st.session_state["saved_configs"] = load_saved_configs_from_disk()
@@ -458,6 +570,15 @@ if "file_label" not in st.session_state:
 
 if "active_dashboard_id" not in st.session_state:
     st.session_state["active_dashboard_id"] = None
+
+if "read_date_col" not in st.session_state:
+    st.session_state["read_date_col"] = None
+
+if "read_dayfirst" not in st.session_state:
+    st.session_state["read_dayfirst"] = False
+
+if "read_date_format" not in st.session_state:
+    st.session_state["read_date_format"] = ""
 
 # -------------------- UI: Header -------------------- #
 st.markdown(
@@ -476,66 +597,124 @@ st.markdown(
 
 # -------------------- Sidebar: Data + Templates -------------------- #
 with st.sidebar:
-    st.markdown("### Data")
-    up = st.file_uploader("Upload CSV", type=["csv"], help="Upload a CSV file from your computer.")
-    path = st.text_input("…or path on server", value="", help="If Streamlit runs where the file exists, you can provide a filesystem path.")
-    st.divider()
+    with st.expander("Data", expanded=True):
+        up = st.file_uploader(
+            "Upload CSV", type=["csv"], help="Upload a CSV file from your computer."
+        )
+        path = st.text_input(
+            "…or path on server",
+            value="",
+            help="If Streamlit runs where the file exists, you can provide a filesystem path.",
+        )
 
-    st.markdown("### Reading options")
-    sep_label = st.selectbox(
-        "Separator",
-        ["Auto-detect", "Comma (,)", "Semicolon (;)", "Tab (\\t)", "Pipe (|)"],
-        index=0,
-    )
-    sep_map = {"Auto-detect": None, "Comma (,)": ",", "Semicolon (;)": ";", "Tab (\\t)": "\t", "Pipe (|)": "|"}
-    sep = sep_map[sep_label]
+        st.markdown("##### Dashboard template")
+        configs = st.session_state["saved_configs"]
+        if configs:
+            name_by_id = {c.get("id"): c.get("name", "Unnamed") for c in configs}
+            ordered = sorted(configs, key=lambda c: (c.get("name") or "").lower())
+            options = [None] + [c.get("id") for c in ordered]
+            idx = 0
+            if st.session_state["active_dashboard_id"] in options:
+                idx = options.index(st.session_state["active_dashboard_id"])
+            active_id = st.selectbox(
+                "Active template",
+                options=options,
+                format_func=lambda v: (
+                    "(none)" if v is None else name_by_id.get(v, "Unnamed")
+                ),
+                index=idx,
+            )
+            st.session_state["active_dashboard_id"] = active_id
+        else:
+            st.info("No templates yet. Build one in **Plot Builder** and save it.")
+            st.session_state["active_dashboard_id"] = None
 
-    decimal_label = st.selectbox("Decimal", ["Dot (.)", "Comma (,)"], index=0)
-    decimal = "." if decimal_label == "Dot (.)" else ","
-
-    header_label = st.selectbox(
-        "Header",
-        [
-            "First row",
-            "Second row (skip first)",
-            "Two rows (multi header)",
-            "No header",
-        ],
-        index=0,
-    )
-    header = 0
-    skiprows = None
-    if header_label == "First row":
-        header, skiprows = 0, None
-    elif header_label == "Second row (skip first)":
-        header, skiprows = 0, [0]
-    elif header_label == "Two rows (multi header)":
-        header, skiprows = [0, 1], None
-    elif header_label == "No header":
-        header, skiprows = None, None
+        st.caption(
+            "Templates are saved to `saved_configs.json` (re-rendered on the current CSV)."
+        )
 
     st.divider()
 
-    st.markdown("### Dashboard template")
-    configs = st.session_state["saved_configs"]
-    if configs:
-        name_by_id = {c.get("id"): c.get("name", "Unnamed") for c in configs}
-        ordered = sorted(configs, key=lambda c: (c.get("name") or "").lower())
-        options = [None] + [c.get("id") for c in ordered]
-        labels = ["(none)"] + [name_by_id[i] for i in options[1:]]
-        idx = 0
-        if st.session_state["active_dashboard_id"] in options:
-            idx = options.index(st.session_state["active_dashboard_id"])
-        active_id = st.selectbox("Active template", options=options, format_func=lambda v: "(none)" if v is None else name_by_id.get(v, "Unnamed"), index=idx)
-        st.session_state["active_dashboard_id"] = active_id
-    else:
-        st.info("No templates yet. Build one in **Plot Builder** and save it.")
-        st.session_state["active_dashboard_id"] = None
+    with st.expander("Reading options", expanded=False):
+        sep_label = st.selectbox(
+            "Separator",
+            ["Auto-detect", "Comma (,)", "Semicolon (;)", "Tab (\\t)", "Pipe (|)"],
+            index=0,
+        )
+        sep_map = {
+            "Auto-detect": None,
+            "Comma (,)": ",",
+            "Semicolon (;)": ";",
+            "Tab (\\t)": "\t",
+            "Pipe (|)": "|",
+        }
+        sep = sep_map[sep_label]
 
-    st.caption("Templates are saved to `saved_configs.json` (re-rendered on the current CSV).")
+        decimal_label = st.selectbox("Decimal", ["Dot (.)", "Comma (,)"], index=0)
+        decimal = "." if decimal_label == "Dot (.)" else ","
+
+        header_label = st.selectbox(
+            "Header",
+            [
+                "First row",
+                "Second row (skip first)",
+                "Two rows (multi header)",
+                "No header",
+            ],
+            index=0,
+        )
+        header = 0
+        skiprows = None
+        if header_label == "First row":
+            header, skiprows = 0, None
+        elif header_label == "Second row (skip first)":
+            header, skiprows = 0, [0]
+        elif header_label == "Two rows (multi header)":
+            header, skiprows = [0, 1], None
+        elif header_label == "No header":
+            header, skiprows = None, None
+
+        st.markdown("##### Date parsing")
+        sidebar_df = st.session_state.get("df")
+        sidebar_cols = (
+            list(sidebar_df.columns) if isinstance(sidebar_df, pd.DataFrame) else []
+        )
+        sidebar_date_guess = guess_date_column(sidebar_cols) if sidebar_cols else None
+        date_options = [None] + sidebar_cols if sidebar_cols else [None]
+
+        current_sidebar_date_col = st.session_state.get("read_date_col")
+        if current_sidebar_date_col not in date_options:
+            current_sidebar_date_col = (
+                sidebar_date_guess if sidebar_date_guess in date_options else None
+            )
+            st.session_state["read_date_col"] = current_sidebar_date_col
+
+        st.selectbox(
+            "Date/time column (optional)",
+            options=date_options,
+            index=date_options.index(current_sidebar_date_col)
+            if current_sidebar_date_col in date_options
+            else 0,
+            key="read_date_col",
+            format_func=lambda v: "(none)" if v is None else str(v),
+            disabled=(len(sidebar_cols) == 0),
+            help="Used for date parsing, mini-plots x-axis, and Plot Builder date filtering.",
+        )
+        st.toggle(
+            "Day-first dates (e.g. 31/01/2024)",
+            key="read_dayfirst",
+            help="Helps parsing for some European date formats.",
+        )
+        st.text_input(
+            "Optional date format (advanced)",
+            key="read_date_format",
+            help="Example: %d/%m/%Y. Leave blank for auto parsing.",
+        )
 
 # -------------------- Data loading -------------------- #
-def read_csv_input(uploaded_file, csv_path: str) -> Tuple[Optional[pd.DataFrame], str, Optional[str]]:
+def read_csv_input(
+    uploaded_file, csv_path: str
+) -> Tuple[Optional[pd.DataFrame], str, Optional[str]]:
     """Read CSV from upload or path. Returns (df, label, error)."""
     if uploaded_file is None and not (csv_path or "").strip():
         return None, "", None
@@ -600,6 +779,20 @@ if df is None:
 cols = list(df.columns)
 date_guess = guess_date_column(cols)
 
+date_col_state = st.session_state.get("read_date_col")
+date_col = (
+    date_col_state
+    if date_col_state in cols
+    else (date_guess if date_guess in cols else None)
+)
+
+dayfirst = bool(st.session_state.get("read_dayfirst", False))
+date_format_input = (st.session_state.get("read_date_format", "") or "").strip()
+date_format = date_format_input or None
+df_parsed = parse_dates_flexible(
+    df, date_col, dayfirst=dayfirst, date_format=date_format
+)
+
 # Top summary row
 left, right = st.columns([2, 1], vertical_alignment="top")
 with left:
@@ -623,41 +816,69 @@ with tabs[0]:
     c1, c2 = st.columns([1.1, 1], vertical_alignment="top")
     with c1:
         st.markdown("##### Quick preview")
-        st.dataframe(df.head(200), use_container_width=True, height=420)
+        st.dataframe(df.head(200), width="stretch", height=420)
     with c2:
         st.markdown("##### Columns & types")
-        info_df = pd.DataFrame({"column": cols, "dtype": [str(df[c].dtype) for c in cols]})
-        st.dataframe(info_df, use_container_width=True, height=420)
+        info_df = pd.DataFrame(
+            {"column": cols, "dtype": [str(df[c].dtype) for c in cols]}
+        )
+        st.dataframe(info_df, width="stretch", height=420)
     with st.expander("Show summary statistics", expanded=False):
-        st.dataframe(df.describe(include="all").transpose(), use_container_width=True)
+        st.dataframe(df.describe(include="all").transpose(), width="stretch")
+
+    with st.expander("Column mini plots (all columns)", expanded=False):
+        preview_x_col = date_col if date_col in cols else None
+        preview_x_series = None
+        if preview_x_col:
+            parsed_x = df_parsed[preview_x_col]
+            if (
+                pd.api.types.is_datetime64_any_dtype(parsed_x)
+                and parsed_x.notna().sum() > 0
+            ):
+                preview_x_series = parsed_x
+            else:
+                preview_x_col = None
+
+        mini_plot_cols = [c for c in cols if c != preview_x_col]
+        if preview_x_col:
+            st.caption(
+                f"Quick scan of all non-time columns using `{preview_x_col}` as shared x-axis."
+            )
+        else:
+            st.caption("Quick scan of all columns.")
+
+        if not mini_plot_cols:
+            st.info("No preview columns available.")
+
+        for start in range(0, len(mini_plot_cols), 3):
+            row_cols = st.columns(3)
+            for offset, col in enumerate(mini_plot_cols[start : start + 3]):
+                with row_cols[offset]:
+                    st.markdown(f"**{col}**")
+                    mini_fig = make_column_preview_figure(
+                        df[col],
+                        x_series=preview_x_series,
+                        x_label=preview_x_col,
+                    )
+                    if mini_fig is not None:
+                        idx = start + offset
+                        st.plotly_chart(
+                            mini_fig,
+                            width="stretch",
+                            key=f"preview_mini_{idx}_{_normalize_colname(col)}",
+                        )
+                    else:
+                        st.caption("No preview available.")
 
 # -------------------- Plot Builder tab -------------------- #
 with tabs[1]:
     st.markdown("#### Plot Builder")
-    st.caption("Build a plot and save it as a reusable template (templates re-render on any CSV you load).")
+    st.caption(
+        "Build a plot and save it as a reusable template (templates re-render on any CSV you load)."
+    )
 
     with st.expander("1) Data & axes", expanded=True):
-        date_col = st.selectbox(
-            "Date/time column (optional)",
-            options=[None] + cols,
-            index=0 if date_guess is None else ([None] + cols).index(date_guess),
-            help="If set, the app will parse the column as datetime and enable a date filter.",
-        )
-
-        dayfirst = st.toggle(
-            "Day-first dates (e.g. 31/01/2024)",
-            value=False,
-            help="Helps parsing for some European date formats.",
-        )
-        date_format = st.text_input(
-            "Optional date format (advanced)",
-            value="",
-            help="Example: %d/%m/%Y. Leave blank for auto parsing.",
-        )
-
-        df_parsed = parse_dates_flexible(df, date_col, dayfirst=dayfirst, date_format=(date_format or None))
-
-        # Date filtering UI
+        # Date filtering UI (date options are centralized in sidebar Reading options)
         filtered_df = df_parsed
         if date_col and date_col in df_parsed.columns:
             dt = df_parsed[date_col]
@@ -671,14 +892,26 @@ with tabs[1]:
                         max_value=max_d.to_pydatetime(),
                         value=(min_d.to_pydatetime(), max_d.to_pydatetime()),
                     )
-                    filtered_df = df_parsed[(df_parsed[date_col] >= r[0]) & (df_parsed[date_col] <= r[1])]
+                    filtered_df = df_parsed[
+                        (df_parsed[date_col] >= r[0]) & (df_parsed[date_col] <= r[1])
+                    ]
 
         x_default = date_col if (date_col in cols) else cols[0]
-        x_col = st.selectbox("X axis", options=cols, index=cols.index(x_default) if x_default in cols else 0)
+        x_col = st.selectbox(
+            "X axis",
+            options=cols,
+            index=cols.index(x_default) if x_default in cols else 0,
+        )
 
-        numeric_candidates = [c for c in cols if pd.api.types.is_numeric_dtype(df_parsed[c])]
+        numeric_candidates = [
+            c for c in cols if pd.api.types.is_numeric_dtype(df_parsed[c])
+        ]
         y_candidates = numeric_candidates if numeric_candidates else cols
-        y_cols = st.multiselect("Y axis (primary)", options=cols, default=[c for c in y_candidates[:1] if c in cols])
+        y_cols = st.multiselect(
+            "Y axis (primary)",
+            options=cols,
+            default=[c for c in y_candidates[:1] if c in cols],
+        )
 
         st.markdown("##### Plot options")
         plot_type = st.radio("Type", options=PLOT_TYPES, horizontal=True, index=0)
@@ -686,13 +919,25 @@ with tabs[1]:
         enable_y2 = st.toggle("Enable secondary Y axis", value=False)
         y2_cols = []
         if enable_y2:
-            y2_cols = st.multiselect("Y axis (secondary)", options=[c for c in cols if c not in y_cols], default=[])
+            y2_cols = st.multiselect(
+                "Y axis (secondary)",
+                options=[c for c in cols if c not in y_cols],
+                default=[],
+            )
 
-        color_col = st.selectbox("Color/group by (optional)", options=[None] + cols, index=0)
+        color_col = st.selectbox(
+            "Color/group by (optional)", options=[None] + cols, index=0
+        )
 
         with st.expander("Advanced: aggregation (for categorical X)", expanded=False):
-            agg = st.selectbox("Aggregate Y by X", options=[None, "mean", "sum", "min", "max", "median"], index=0)
-            st.caption("Useful when X is categorical and you have many rows per category.")
+            agg = st.selectbox(
+                "Aggregate Y by X",
+                options=[None, "mean", "sum", "min", "max", "median"],
+                index=0,
+            )
+            st.caption(
+                "Useful when X is categorical and you have many rows per category."
+            )
 
     # Per-series styling in the left taskbar (sidebar)
     with st.sidebar:
@@ -711,28 +956,55 @@ with tabs[1]:
             series_list = list(dict.fromkeys((y_cols or []) + (y2_cols or [])))
             if not series_list:
                 st.info("Select Y columns to customize them.")
-            for s in series_list:
+            for idx, s in enumerate(series_list):
                 safe = _normalize_colname(s).replace(" ", "_") or "series"
+                default_color = DEFAULT_SERIES_COLORS[idx % len(DEFAULT_SERIES_COLORS)]
+                color_key = f"sty_{safe}_color"
+                if color_key not in st.session_state:
+                    st.session_state[color_key] = default_color
                 st.markdown(f"**{s}**")
                 c1, c2, c3 = st.columns([1.2, 1, 1])
                 with c1:
-                    color = st.color_picker("Color", value="#1f77b4", key=f"sty_{safe}_color", label_visibility="collapsed")
+                    color = st.color_picker(
+                        "Color",
+                        key=color_key,
+                        label_visibility="collapsed",
+                    )
                 with c2:
-                    width = st.slider("Width", min_value=1, max_value=8, value=2, key=f"sty_{safe}_width", label_visibility="collapsed")
+                    width = st.slider(
+                        "Width",
+                        min_value=1,
+                        max_value=8,
+                        value=2,
+                        key=f"sty_{safe}_width",
+                        label_visibility="collapsed",
+                    )
                 with c3:
-                    dash = st.selectbox("Style", options=dash_options, index=0, key=f"sty_{safe}_dash", label_visibility="collapsed")
+                    dash = st.selectbox(
+                        "Style",
+                        options=dash_options,
+                        index=0,
+                        key=f"sty_{safe}_dash",
+                        label_visibility="collapsed",
+                    )
                 style_map[s] = {"color": color, "width": width, "dash": dash}
                 st.markdown("")
 
     with st.expander("2) Styling", expanded=False):
-        template = st.selectbox("Theme", options=TEMPLATES, index=TEMPLATES.index("plotly_white"))
+        template = st.selectbox(
+            "Theme", options=TEMPLATES, index=TEMPLATES.index("plotly_white")
+        )
         title = st.text_input("Plot title (optional)", value="")
         yaxis_title_1 = st.text_input("Y1 axis title (optional)", value="")
-        yaxis_title_2 = st.text_input("Y2 axis title (optional)", value="") if enable_y2 else ""
+        yaxis_title_2 = (
+            st.text_input("Y2 axis title (optional)", value="") if enable_y2 else ""
+        )
 
     st.divider()
     st.markdown("#### Preview")
-    st.caption("The figure updates based on your settings. If parsing/filters change, plots update too.")
+    st.caption(
+        "The figure updates based on your settings. If parsing/filters change, plots update too."
+    )
 
     fig = None
     warnings = []
@@ -754,7 +1026,9 @@ with tabs[1]:
                 agg=agg,
                 series_style=style_map,
             )
-            fig, warnings = render_plot_from_spec(filtered_df, spec, list(filtered_df.columns))
+            fig, warnings = render_plot_from_spec(
+                filtered_df, spec, list(filtered_df.columns)
+            )
             if warnings:
                 with st.expander("Warnings", expanded=False):
                     for w in warnings:
@@ -762,18 +1036,24 @@ with tabs[1]:
 
             if fig is not None:
                 # Full-width plot (stable unique key to avoid StreamlitDuplicateElementId)
-                st.plotly_chart(fig, use_container_width=True, key="plot_builder_preview")
+                st.plotly_chart(fig, width="stretch", key="plot_builder_preview")
         except Exception as e:
             st.error(f"Error generating plot: {e}")
 
     st.divider()
     st.markdown("#### Save as dashboard template")
     st.caption("Templates re-render on any CSV you load (with fuzzy column matching).")
-    dash_name = st.text_input("Template name", value="", placeholder="e.g. Discharge dashboard")
-    plot_label = st.text_input("Plot label (optional)", value="", placeholder="e.g. Q (m³/s) vs time")
+    dash_name = st.text_input(
+        "Template name", value="", placeholder="e.g. Discharge dashboard"
+    )
+    plot_label = st.text_input(
+        "Plot label (optional)", value="", placeholder="e.g. Q (m³/s) vs time"
+    )
 
     save_disabled = (fig is None) or (not (dash_name or "").strip())
-    if st.button("Save template (single plot)", use_container_width=True, disabled=save_disabled):
+    if st.button(
+        "Save template (single plot)", width="stretch", disabled=save_disabled
+    ):
         new_cfg = {
             "id": str(uuid.uuid4()),
             "name": dash_name.strip(),
@@ -800,25 +1080,35 @@ with tabs[1]:
         st.session_state["active_dashboard_id"] = new_cfg["id"]
         st.success("Template saved and selected in the sidebar.")
 
-    st.caption("Multi-plot dashboards can be added next (UI for adding plots to an existing template).")
+    st.caption(
+        "Multi-plot dashboards can be added next (UI for adding plots to an existing template)."
+    )
 
 # -------------------- Dashboard tab -------------------- #
 with tabs[2]:
     st.markdown("#### Dashboard")
-    st.caption("Select an active template in the sidebar. The dashboard re-renders on the current dataset.")
+    st.caption(
+        "Select an active template in the sidebar. The dashboard re-renders on the current dataset."
+    )
 
     active_id = st.session_state.get("active_dashboard_id")
     configs = st.session_state["saved_configs"]
-    cfg = next((c for c in configs if c.get("id") == active_id), None) if active_id else None
+    cfg = (
+        next((c for c in configs if c.get("id") == active_id), None)
+        if active_id
+        else None
+    )
 
     if not cfg:
-        st.info("No active template selected. Choose one in the sidebar, or create one in **Plot Builder**.")
+        st.info(
+            "No active template selected. Choose one in the sidebar, or create one in **Plot Builder**."
+        )
     else:
         st.markdown(
             f"""
             <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
-              <div style="font-size:18px; font-weight:700;">{cfg.get('name','Unnamed')}</div>
-              <div style="opacity:0.8; font-size:12px;">Created: {cfg.get('created_at','')}</div>
+              <div style="font-size:18px; font-weight:700;">{cfg.get("name", "Unnamed")}</div>
+              <div style="opacity:0.8; font-size:12px;">Created: {cfg.get("created_at", "")}</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -831,10 +1121,22 @@ with tabs[2]:
             # Optional global date parsing + filtering for dashboard
             st.divider()
             with st.expander("Global dashboard options", expanded=False):
-                date_col = st.selectbox("Date/time column for dashboard (optional)", options=[None] + cols, index=0 if date_guess is None else ([None] + cols).index(date_guess))
-                dayfirst = st.toggle("Day-first dates", value=False, key="dash_dayfirst")
-                date_format = st.text_input("Optional date format", value="", key="dash_dateformat")
-                dash_df = parse_dates_flexible(df, date_col, dayfirst=dayfirst, date_format=(date_format or None))
+                date_col = st.selectbox(
+                    "Date/time column for dashboard (optional)",
+                    options=[None] + cols,
+                    index=0
+                    if date_guess is None
+                    else ([None] + cols).index(date_guess),
+                )
+                dayfirst = st.toggle(
+                    "Day-first dates", value=False, key="dash_dayfirst"
+                )
+                date_format = st.text_input(
+                    "Optional date format", value="", key="dash_dateformat"
+                )
+                dash_df = parse_dates_flexible(
+                    df, date_col, dayfirst=dayfirst, date_format=(date_format or None)
+                )
 
                 dash_filtered = dash_df
                 if date_col and date_col in dash_df.columns:
@@ -850,7 +1152,10 @@ with tabs[2]:
                                 value=(min_d.to_pydatetime(), max_d.to_pydatetime()),
                                 key="dash_dateslider",
                             )
-                            dash_filtered = dash_df[(dash_df[date_col] >= r[0]) & (dash_df[date_col] <= r[1])]
+                            dash_filtered = dash_df[
+                                (dash_df[date_col] >= r[0])
+                                & (dash_df[date_col] <= r[1])
+                            ]
                 # store
                 st.session_state["dash_df_filtered"] = dash_filtered
 
@@ -862,16 +1167,22 @@ with tabs[2]:
                 with st.container(border=True):
                     title = spec.get("title") or f"Plot {i}"
                     st.markdown(f"**{title}**")
-                    fig, warns = render_plot_from_spec(dash_filtered, spec, available_cols)
+                    fig, warns = render_plot_from_spec(
+                        dash_filtered, spec, available_cols
+                    )
                     if warns:
                         with st.expander("Column resolution warnings", expanded=False):
                             for w in warns:
                                 st.warning(w)
-                            st.caption("Tip: You can fix this by editing the template JSON in the Templates tab.")
+                            st.caption(
+                                "Tip: You can fix this by editing the template JSON in the Templates tab."
+                            )
                     if fig is not None:
                         # Unique per rendered dashboard plot
                         cfg_id = (cfg or {}).get("id", "cfg")
-                        st.plotly_chart(fig, use_container_width=True, key=f"dash_plot_{cfg_id}_{i}")
+                        st.plotly_chart(
+                            fig, width="stretch", key=f"dash_plot_{cfg_id}_{i}"
+                        )
                     else:
                         st.error("Could not render this plot on the current dataset.")
 
@@ -887,13 +1198,17 @@ with tabs[3]:
         # Select template
         ordered = sorted(configs, key=lambda c: (c.get("name") or "").lower())
         id_to_cfg = {c.get("id"): c for c in ordered}
-        sel_id = st.selectbox("Select template", options=[c.get("id") for c in ordered], format_func=lambda v: id_to_cfg[v].get("name", "Unnamed"))
+        sel_id = st.selectbox(
+            "Select template",
+            options=[c.get("id") for c in ordered],
+            format_func=lambda v: id_to_cfg[v].get("name", "Unnamed"),
+        )
         sel = id_to_cfg.get(sel_id)
 
         c1, c2, c3 = st.columns([1, 1, 1], vertical_alignment="top")
         with c1:
             new_name = st.text_input("Rename", value=sel.get("name", ""))
-            if st.button("Apply rename", use_container_width=True):
+            if st.button("Apply rename", width="stretch"):
                 sel["name"] = new_name.strip() or sel.get("name", "")
                 persist_saved_configs_to_disk(configs)
                 st.success("Renamed.")
@@ -901,13 +1216,15 @@ with tabs[3]:
             st.download_button(
                 "Export selected (JSON)",
                 data=json.dumps(sel, ensure_ascii=False, indent=2).encode("utf-8"),
-                file_name=f"{_normalize_colname(sel.get('name','template')).replace(' ','_') or 'template'}.json",
+                file_name=f"{_normalize_colname(sel.get('name', 'template')).replace(' ', '_') or 'template'}.json",
                 mime="application/json",
-                use_container_width=True,
+                width="stretch",
             )
         with c3:
-            if st.button("Delete selected", type="secondary", use_container_width=True):
-                st.session_state["saved_configs"] = [c for c in configs if c.get("id") != sel_id]
+            if st.button("Delete selected", type="secondary", width="stretch"):
+                st.session_state["saved_configs"] = [
+                    c for c in configs if c.get("id") != sel_id
+                ]
                 persist_saved_configs_to_disk(st.session_state["saved_configs"])
                 if st.session_state.get("active_dashboard_id") == sel_id:
                     st.session_state["active_dashboard_id"] = None
@@ -924,14 +1241,14 @@ with tabs[3]:
             )
             col_a, col_b = st.columns(2)
             with col_a:
-                if st.button("Validate JSON", use_container_width=True):
+                if st.button("Validate JSON", width="stretch"):
                     try:
                         _ = json.loads(edited)
                         st.success("Valid JSON.")
                     except Exception as e:
                         st.error(f"Invalid JSON: {e}")
             with col_b:
-                if st.button("Save JSON to template", use_container_width=True):
+                if st.button("Save JSON to template", width="stretch"):
                     try:
                         new_obj = json.loads(edited)
                         if not isinstance(new_obj, dict):
@@ -955,7 +1272,9 @@ with tabs[3]:
 
         st.divider()
         st.markdown("##### Import template JSON")
-        upl = st.file_uploader("Import a template (.json)", type=["json"], key="import_json")
+        upl = st.file_uploader(
+            "Import a template (.json)", type=["json"], key="import_json"
+        )
         if upl is not None:
             try:
                 imported = json.loads(upl.getvalue().decode("utf-8"))
@@ -963,7 +1282,9 @@ with tabs[3]:
                     st.error("Imported file must be a JSON object.")
                 else:
                     imported.setdefault("id", str(uuid.uuid4()))
-                    imported.setdefault("created_at", datetime.datetime.utcnow().isoformat() + "Z")
+                    imported.setdefault(
+                        "created_at", datetime.datetime.utcnow().isoformat() + "Z"
+                    )
                     imported.setdefault("plots", [])
                     st.session_state["saved_configs"].append(imported)
                     persist_saved_configs_to_disk(st.session_state["saved_configs"])
