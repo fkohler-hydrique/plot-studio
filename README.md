@@ -52,8 +52,8 @@ Use this to control CSV parsing and date parsing globally:
 - `Decimal`: dot/comma
 - `Header`: first row, second row, two-row multi-header, no header
 - `Date/time column (optional)`
-- `Day-first dates`
-- `Optional date format`
+- `Date order`: auto-detect, day-first, month-first
+- `Date format override (optional)`
 
 These settings affect:
 
