@@ -25,3 +25,40 @@ def test_make_column_preview_figure_for_numeric_series_returns_figure():
 
     assert fig is not None
     assert len(fig.data) == 1
+
+
+def test_make_column_preview_figure_downsamples_numeric_series():
+    series = pd.Series(range(1_000))
+
+    fig = make_column_preview_figure(series, max_points=75)
+
+    assert fig is not None
+    assert len(fig.data[0].x) == 75
+    assert fig.data[0].x[0] == 0
+    assert fig.data[0].x[-1] == 999
+
+
+def test_make_column_preview_figure_reuses_sorted_datetime_x_series():
+    series = pd.Series([10, 20, 30, 40], index=[0, 1, 2, 3])
+    x_series = pd.to_datetime(
+        pd.Series(
+            ["2024-01-04", "2024-01-01", "2024-01-03", "2024-01-02"],
+            index=[0, 1, 2, 3],
+        )
+    ).sort_values(kind="stable")
+
+    fig = make_column_preview_figure(
+        series,
+        x_series=x_series,
+        x_label="date",
+        x_sorted=True,
+        max_points=3,
+    )
+
+    assert fig is not None
+    assert list(fig.data[0].x) == [
+        pd.Timestamp("2024-01-01"),
+        pd.Timestamp("2024-01-03"),
+        pd.Timestamp("2024-01-04"),
+    ]
+    assert list(fig.data[0].y) == [20, 30, 10]
