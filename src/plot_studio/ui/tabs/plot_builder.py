@@ -10,7 +10,9 @@ import streamlit as st
 from plot_studio.config import DEFAULT_SERIES_COLORS, PLOT_TYPES, TEMPLATES
 from plot_studio.plotting.figures import render_plot_from_spec
 from plot_studio.plotting.specs import build_plot_spec_from_builder
+from plot_studio.state import remember_recent_config
 from plot_studio.services.columns import normalize_colname
+from plot_studio.services.templates import find_saved_config_by_name
 from plot_studio.services.templates import persist_saved_configs_to_disk
 from plot_studio.ui.context import MainDatasetContext
 
@@ -19,7 +21,7 @@ def render_plot_builder_tab(dataset: MainDatasetContext) -> None:
     """Render the Plot Builder tab."""
     st.markdown("#### Plot Builder")
     st.caption(
-        "Build a plot and save it as a reusable template (templates re-render on any CSV you load)."
+        "Build a plot and save it into a reusable dashboard that can be re-rendered on any CSV you load."
     )
 
     with st.expander("1) Data & axes", expanded=True):
@@ -40,6 +42,8 @@ def render_plot_builder_tab(dataset: MainDatasetContext) -> None:
                         (dataset.df_parsed[dataset.date_col] >= date_range[0])
                         & (dataset.df_parsed[dataset.date_col] <= date_range[1])
                     ]
+                    if filtered_df.empty:
+                        st.warning("The current date filter leaves no rows to plot.")
 
         x_default = (
             dataset.date_col if dataset.date_col in dataset.cols else dataset.cols[0]
@@ -138,7 +142,10 @@ def render_plot_builder_tab(dataset: MainDatasetContext) -> None:
             if warnings:
                 with st.expander("Warnings", expanded=False):
                     for warning in warnings:
-                        st.warning(warning)
+                        if warning.startswith("Matched "):
+                            st.info(warning)
+                        else:
+                            st.warning(warning)
 
             if fig is not None:
                 st.plotly_chart(fig, width="stretch", key="plot_builder_preview")
@@ -146,54 +153,117 @@ def render_plot_builder_tab(dataset: MainDatasetContext) -> None:
             st.error(f"Error generating plot: {exc}")
 
     st.divider()
-    st.markdown("#### Save as dashboard template")
-    st.caption("Templates re-render on any CSV you load (with fuzzy column matching).")
+    st.markdown("#### Save to dashboard")
+    st.caption(
+        "Select an existing dashboard to append this plot, or type a new name to create one."
+    )
+    pending_dashboard_id = st.session_state.pop(
+        "plot_builder_pending_dashboard_id",
+        None,
+    )
+    if pending_dashboard_id is not None:
+        st.session_state["plot_builder_existing_dashboard_id"] = pending_dashboard_id
+        st.session_state["plot_builder_last_dashboard_id"] = pending_dashboard_id
+
+    ordered_dashboards = sorted(
+        st.session_state["saved_configs"],
+        key=lambda cfg: (cfg.get("name") or "").lower(),
+    )
+    dashboard_by_id = {
+        cfg.get("id"): cfg for cfg in ordered_dashboards if cfg.get("id")
+    }
+    selected_dashboard_id = st.selectbox(
+        "Existing dashboard (optional)",
+        options=[""] + list(dashboard_by_id.keys()),
+        format_func=lambda value: (
+            "Create new dashboard"
+            if not value
+            else dashboard_by_id.get(value, {}).get("name", "Unnamed")
+        ),
+        key="plot_builder_existing_dashboard_id",
+    )
+    previous_dashboard_id = st.session_state.get("plot_builder_last_dashboard_id")
+    if selected_dashboard_id != previous_dashboard_id:
+        st.session_state["plot_builder_dashboard_name"] = (
+            dashboard_by_id.get(selected_dashboard_id, {}).get("name", "")
+            if selected_dashboard_id
+            else ""
+        )
+        st.session_state["plot_builder_last_dashboard_id"] = selected_dashboard_id
+
     dash_name = st.text_input(
-        "Template name",
-        value="",
+        "Dashboard name",
+        key="plot_builder_dashboard_name",
         placeholder="e.g. Discharge dashboard",
     )
     plot_label = st.text_input(
         "Plot label (optional)",
         value="",
-        placeholder="e.g. Q (m³/s) vs time",
+        placeholder="e.g. Q (m3/s) vs time",
     )
 
     save_disabled = (fig is None) or (not (dash_name or "").strip())
     if st.button(
-        "Save template (single plot)",
+        "Save to dashboard",
         width="stretch",
         disabled=save_disabled,
     ):
-        new_cfg = {
-            "id": str(uuid.uuid4()),
-            "name": dash_name.strip(),
-            "created_at": datetime.datetime.utcnow().isoformat() + "Z",
-            "plots": [
-                build_plot_spec_from_builder(
-                    title=plot_label.strip() or (title.strip() or None),
-                    x_col=x_col,
-                    y_cols=y_cols,
-                    plot_type=plot_type,
-                    template=template,
-                    enable_secondary_axis=enable_y2,
-                    y2_cols=y2_cols,
-                    yaxis_title_1=yaxis_title_1.strip() or None,
-                    yaxis_title_2=yaxis_title_2.strip() or None,
-                    color_col=color_col,
-                    agg=agg,
-                    series_style=style_map,
-                )
-            ],
-        }
-        st.session_state["saved_configs"].append(new_cfg)
-        persist_saved_configs_to_disk(st.session_state["saved_configs"])
-        st.session_state["active_dashboard_id"] = new_cfg["id"]
-        st.success("Template saved and selected in the sidebar.")
-
-    st.caption(
-        "Multi-plot dashboards can be added next (UI for adding plots to an existing template)."
-    )
+        dashboard_name = dash_name.strip()
+        new_plot = build_plot_spec_from_builder(
+            title=plot_label.strip() or (title.strip() or None),
+            x_col=x_col,
+            y_cols=y_cols,
+            plot_type=plot_type,
+            template=template,
+            enable_secondary_axis=enable_y2,
+            y2_cols=y2_cols,
+            yaxis_title_1=yaxis_title_1.strip() or None,
+            yaxis_title_2=yaxis_title_2.strip() or None,
+            color_col=color_col,
+            agg=agg,
+            series_style=style_map,
+        )
+        existing_dashboard = find_saved_config_by_name(
+            st.session_state["saved_configs"],
+            dashboard_name,
+        )
+        if existing_dashboard is not None:
+            updated_dashboard = dict(existing_dashboard)
+            updated_dashboard["name"] = dashboard_name
+            updated_dashboard["plots"] = [
+                *(existing_dashboard.get("plots") or []),
+                new_plot,
+            ]
+            new_saved_configs = [
+                updated_dashboard
+                if cfg.get("id") == existing_dashboard.get("id")
+                else cfg
+                for cfg in st.session_state["saved_configs"]
+            ]
+        else:
+            updated_dashboard = {
+                "id": str(uuid.uuid4()),
+                "name": dashboard_name,
+                "created_at": datetime.datetime.utcnow().isoformat() + "Z",
+                "plots": [new_plot],
+            }
+            new_saved_configs = [*st.session_state["saved_configs"], updated_dashboard]
+        save_error = persist_saved_configs_to_disk(new_saved_configs)
+        if save_error:
+            st.error(save_error)
+        else:
+            st.session_state["saved_configs"] = new_saved_configs
+            st.session_state["saved_configs_load_error"] = None
+            st.session_state["active_dashboard_id"] = updated_dashboard["id"]
+            st.session_state["plot_builder_pending_dashboard_id"] = updated_dashboard[
+                "id"
+            ]
+            remember_recent_config(st.session_state, updated_dashboard["id"])
+            if existing_dashboard is not None:
+                st.success("Plot added to the selected dashboard.")
+            else:
+                st.success("New dashboard created and selected.")
+            st.rerun()
 
 
 def render_series_styling(

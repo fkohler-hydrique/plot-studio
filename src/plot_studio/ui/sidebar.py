@@ -4,6 +4,11 @@ import pandas as pd
 import streamlit as st
 
 from plot_studio.config import DATE_PARSE_MODES
+from plot_studio.services.recent_csvs import (
+    format_recent_csv_details,
+    list_recent_csvs,
+    touch_recent_csv,
+)
 from plot_studio.services.columns import guess_date_column
 from plot_studio.ui.context import ReadingOptions, SidebarSelection
 
@@ -11,42 +16,131 @@ from plot_studio.ui.context import ReadingOptions, SidebarSelection
 def render_sidebar() -> SidebarSelection:
     """Render the main sidebar and return the current selections."""
     with st.sidebar:
-        uploaded_file, csv_path = render_data_section()
+        uploaded_file, recent_csv_id = render_data_section()
         st.divider()
         reading_options = render_reading_options()
 
     return SidebarSelection(
         uploaded_file=uploaded_file,
-        csv_path=csv_path,
+        recent_csv_id=recent_csv_id,
         reading_options=reading_options,
     )
 
 
 def render_data_section():
-    """Render the file-selection and active-template section."""
+    """Render the file-selection and active-dashboard section."""
     with st.expander("Data", expanded=True):
         uploaded_file = st.file_uploader(
             "Upload CSV",
             type=["csv"],
             help="Upload a CSV file from your computer.",
         )
-        csv_path = st.text_input(
-            "…or path on server",
-            value="",
-            help="If Streamlit runs where the file exists, you can provide a filesystem path.",
-        )
+        selected_recent_csv_id = None
+        uploaded_signature = None
+        if uploaded_file is not None:
+            uploaded_signature = f"{uploaded_file.name}:{len(uploaded_file.getvalue())}"
 
-        st.markdown("##### Dashboard template")
+        recent_csvs = list_recent_csvs()
+        if recent_csvs:
+            st.caption("Recent CSVs")
+            top_recent_csvs = recent_csvs[:3]
+            older_recent_csvs = recent_csvs[3:]
+
+            for entry in top_recent_csvs:
+                entry_id = entry.get("id")
+                filename = entry.get("filename", "Unnamed CSV")
+                if st.button(
+                    filename,
+                    key=f"recent_csv_{entry_id}",
+                    width="stretch",
+                    type=(
+                        "primary"
+                        if st.session_state.get("active_recent_csv_id") == entry_id
+                        and st.session_state.get("active_csv_source") == "recent"
+                        else "secondary"
+                    ),
+                ):
+                    selected_recent_csv_id = entry_id
+                    touch_recent_csv(entry_id)
+                    st.session_state["active_recent_csv_id"] = entry_id
+                    st.session_state["active_csv_source"] = "recent"
+                    st.rerun()
+                st.caption(format_recent_csv_details(entry))
+
+            if older_recent_csvs:
+                older_map = {
+                    entry.get("id"): entry.get("filename", "Unnamed CSV")
+                    for entry in older_recent_csvs
+                    if entry.get("id")
+                }
+                older_options = list(older_map)
+                selected_older_recent = st.selectbox(
+                    "Older recent CSVs",
+                    options=[None] + older_options,
+                    index=0,
+                    format_func=lambda value: (
+                        "Choose an older recent CSV"
+                        if value is None
+                        else older_map.get(value, "Unnamed CSV")
+                    ),
+                    help="Scroll through older recently opened CSVs.",
+                )
+                if selected_older_recent is not None:
+                    older_entry = next(
+                        (
+                            entry
+                            for entry in older_recent_csvs
+                            if entry.get("id") == selected_older_recent
+                        ),
+                        None,
+                    )
+                    if older_entry is not None:
+                        st.caption(format_recent_csv_details(older_entry))
+                    if st.button(
+                        "Open selected recent CSV",
+                        key="open_older_recent_csv",
+                        width="stretch",
+                    ):
+                        selected_recent_csv_id = selected_older_recent
+                        touch_recent_csv(selected_older_recent)
+                        st.session_state["active_recent_csv_id"] = (
+                            selected_older_recent
+                        )
+                        st.session_state["active_csv_source"] = "recent"
+                        st.rerun()
+
+        if selected_recent_csv_id is None and (
+            st.session_state.get("active_csv_source") == "recent"
+            and st.session_state.get("active_recent_csv_id") is not None
+        ):
+            selected_recent_csv_id = st.session_state["active_recent_csv_id"]
+        elif (
+            selected_recent_csv_id is None
+            and uploaded_file is not None
+            and uploaded_signature
+            != st.session_state.get("last_uploaded_csv_signature")
+        ):
+            st.session_state["active_csv_source"] = "upload"
+            st.session_state["active_recent_csv_id"] = None
+        elif (
+            selected_recent_csv_id is None
+            and uploaded_file is not None
+            and st.session_state.get("active_csv_source") == "upload"
+        ):
+            st.session_state["active_recent_csv_id"] = None
+
+        st.markdown("##### Dashboard")
         configs = st.session_state["saved_configs"]
         if configs:
             name_by_id = {cfg.get("id"): cfg.get("name", "Unnamed") for cfg in configs}
             ordered = sorted(configs, key=lambda cfg: (cfg.get("name") or "").lower())
+
             options = [None] + [cfg.get("id") for cfg in ordered]
             selected_index = 0
             if st.session_state["active_dashboard_id"] in options:
                 selected_index = options.index(st.session_state["active_dashboard_id"])
             active_id = st.selectbox(
-                "Active template",
+                "Active dashboard",
                 options=options,
                 format_func=lambda value: (
                     "(none)" if value is None else name_by_id.get(value, "Unnamed")
@@ -55,14 +149,14 @@ def render_data_section():
             )
             st.session_state["active_dashboard_id"] = active_id
         else:
-            st.info("No templates yet. Build one in **Plot Builder** and save it.")
+            st.info("No dashboards yet. Build one in **Plot Builder** and save it.")
             st.session_state["active_dashboard_id"] = None
 
         st.caption(
-            "Templates are saved to `saved_configs.json` (re-rendered on the current CSV)."
+            "Dashboards are saved to `saved_configs.json` (re-rendered on the current CSV)."
         )
 
-    return uploaded_file, csv_path
+    return uploaded_file, selected_recent_csv_id
 
 
 def render_reading_options() -> ReadingOptions:

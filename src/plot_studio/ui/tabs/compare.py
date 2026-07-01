@@ -5,9 +5,15 @@ import streamlit as st
 
 from plot_studio.config import DATE_PARSE_MODES
 from plot_studio.plotting.figures import render_plot_from_spec
+from plot_studio.state import remember_recent_config
 from plot_studio.services.columns import guess_date_column, resolve_column
 from plot_studio.services.csv_reading import read_csv_input
 from plot_studio.services.date_parsing import parse_dates_flexible
+from plot_studio.services.recent_csvs import (
+    format_recent_csv_details,
+    get_recent_csv_cache_path,
+    list_recent_csvs,
+)
 from plot_studio.ui.context import MainDatasetContext, ReadingOptions
 
 
@@ -20,41 +26,82 @@ def render_compare_tab(
     st.caption("Load two CSVs and compare selected saved plot configs side by side.")
 
     cmp_left, cmp_right = st.columns(2, vertical_alignment="top")
+    recent_csvs = list_recent_csvs(limit=10)
+    recent_options = [None] + [entry.get("id") for entry in recent_csvs if entry.get("id")]
+    recent_by_id = {
+        entry.get("id"): entry for entry in recent_csvs if entry.get("id")
+    }
     with cmp_left:
         st.markdown("##### Dataset A")
         cmp_up_a = st.file_uploader("Upload CSV A", type=["csv"], key="cmp_up_a")
-        cmp_path_a = st.text_input(
-            "…or path A on server",
-            value="",
-            key="cmp_path_a",
-            help="If Streamlit runs where the file exists, you can provide a filesystem path.",
+        cmp_recent_a = st.selectbox(
+            "Recent CSV for A",
+            options=recent_options,
+            index=0,
+            format_func=lambda value: (
+                "Choose a recent CSV"
+                if value is None
+                else recent_by_id.get(value, {}).get("filename", "Unnamed CSV")
+            ),
+            key="cmp_recent_csv_a",
+            help="Optional. If selected, this cached recent CSV is used for Dataset A.",
         )
+        if cmp_recent_a is not None and cmp_recent_a in recent_by_id:
+            st.caption(format_recent_csv_details(recent_by_id[cmp_recent_a]))
     with cmp_right:
         st.markdown("##### Dataset B")
         cmp_up_b = st.file_uploader("Upload CSV B", type=["csv"], key="cmp_up_b")
-        cmp_path_b = st.text_input(
-            "…or path B on server",
-            value="",
-            key="cmp_path_b",
-            help="If Streamlit runs where the file exists, you can provide a filesystem path.",
+        cmp_recent_b = st.selectbox(
+            "Recent CSV for B",
+            options=recent_options,
+            index=0,
+            format_func=lambda value: (
+                "Choose a recent CSV"
+                if value is None
+                else recent_by_id.get(value, {}).get("filename", "Unnamed CSV")
+            ),
+            key="cmp_recent_csv_b",
+            help="Optional. If selected, this cached recent CSV is used for Dataset B.",
         )
+        if cmp_recent_b is not None and cmp_recent_b in recent_by_id:
+            st.caption(format_recent_csv_details(recent_by_id[cmp_recent_b]))
 
-    cmp_df_a, cmp_label_a, cmp_err_a = read_csv_input(
-        cmp_up_a,
+    cmp_path_a = (
+        str(get_recent_csv_cache_path(cmp_recent_a))
+        if cmp_recent_a is not None and cmp_recent_a in recent_by_id
+        else ""
+    )
+    cmp_path_b = (
+        str(get_recent_csv_cache_path(cmp_recent_b))
+        if cmp_recent_b is not None and cmp_recent_b in recent_by_id
+        else ""
+    )
+    cmp_source_kind_a = "Recent cache" if cmp_path_a else "Upload"
+    cmp_source_kind_b = "Recent cache" if cmp_path_b else "Upload"
+
+    cmp_df_a, cmp_label_a, cmp_err_a, _ = read_csv_input(
+        None if cmp_path_a else cmp_up_a,
         cmp_path_a,
         decimal=reading_options.decimal,
         sep=reading_options.sep,
         header=reading_options.header,
         skiprows=reading_options.skiprows,
+        path_source_kind=cmp_source_kind_a,
     )
-    cmp_df_b, cmp_label_b, cmp_err_b = read_csv_input(
-        cmp_up_b,
+    cmp_df_b, cmp_label_b, cmp_err_b, _ = read_csv_input(
+        None if cmp_path_b else cmp_up_b,
         cmp_path_b,
         decimal=reading_options.decimal,
         sep=reading_options.sep,
         header=reading_options.header,
         skiprows=reading_options.skiprows,
+        path_source_kind=cmp_source_kind_b,
     )
+
+    if cmp_recent_a is not None and cmp_recent_a in recent_by_id:
+        cmp_label_a = recent_by_id[cmp_recent_a].get("filename", cmp_label_a)
+    if cmp_recent_b is not None and cmp_recent_b in recent_by_id:
+        cmp_label_b = recent_by_id[cmp_recent_b].get("filename", cmp_label_b)
 
     if cmp_err_a:
         st.error(f"Could not read CSV A: {cmp_err_a}")
@@ -93,6 +140,7 @@ def render_compare_tab(
 
     if cmp_selected_cfg_ids:
         st.session_state["active_dashboard_id"] = cmp_selected_cfg_ids[0]
+        remember_recent_config(st.session_state, cmp_selected_cfg_ids[0])
 
     if not cmp_selected_cfg_ids:
         st.info("Select at least one plot config to compare.")
@@ -213,6 +261,10 @@ def render_compare_options(
                         (cmp_df_b_parsed[cmp_resolved_date_b] >= cmp_range[0])
                         & (cmp_df_b_parsed[cmp_resolved_date_b] <= cmp_range[1])
                     ]
+                    if cmp_filtered_a.empty or cmp_filtered_b.empty:
+                        st.warning(
+                            "The shared date range leaves at least one comparison dataset empty."
+                        )
 
     return {
         "cmp_filtered_a": cmp_filtered_a,
@@ -257,11 +309,14 @@ def render_compare_results(
                 )
                 if warns_a:
                     with st.expander(
-                        f"Warnings (A) - {cmp_cfg.get('name', 'Unnamed')}",
+                        f"Resolution notes (A) - {cmp_cfg.get('name', 'Unnamed')}",
                         expanded=False,
                     ):
                         for warning in warns_a:
-                            st.warning(warning)
+                            if warning.startswith("Matched "):
+                                st.info(warning)
+                            else:
+                                st.warning(warning)
                 if fig_a is not None:
                     st.plotly_chart(
                         fig_a,
@@ -280,11 +335,14 @@ def render_compare_results(
                 )
                 if warns_b:
                     with st.expander(
-                        f"Warnings (B) - {cmp_cfg.get('name', 'Unnamed')}",
+                        f"Resolution notes (B) - {cmp_cfg.get('name', 'Unnamed')}",
                         expanded=False,
                     ):
                         for warning in warns_b:
-                            st.warning(warning)
+                            if warning.startswith("Matched "):
+                                st.info(warning)
+                            else:
+                                st.warning(warning)
                 if fig_b is not None:
                     st.plotly_chart(
                         fig_b,

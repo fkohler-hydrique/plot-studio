@@ -19,7 +19,10 @@ def to_numeric_safe(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
     numeric_df = df.copy()
     for col in cols:
         if col in numeric_df.columns and is_object_dtype(numeric_df[col]):
-            numeric_df[col] = pd.to_numeric(numeric_df[col], errors="ignore")
+            try:
+                numeric_df[col] = pd.to_numeric(numeric_df[col])
+            except (TypeError, ValueError):
+                continue
     return numeric_df
 
 
@@ -290,12 +293,18 @@ def render_plot_from_spec(
     if not x_col:
         resolution_warnings.append(f"Missing X column: '{x_requested}'")
         return None, resolution_warnings
+    if x_requested and x_col != x_requested:
+        resolution_warnings.append(f"Matched X column '{x_requested}' -> '{x_col}'")
 
     y_cols: list[str] = []
     for requested_col in spec.get("y_cols") or []:
         resolved = resolve_column(requested_col, available_cols)
         if resolved:
             y_cols.append(resolved)
+            if resolved != requested_col:
+                resolution_warnings.append(
+                    f"Matched Y column '{requested_col}' -> '{resolved}'"
+                )
         else:
             resolution_warnings.append(f"Missing Y column: '{requested_col}'")
 
@@ -304,6 +313,10 @@ def render_plot_from_spec(
         resolved = resolve_column(requested_col, available_cols)
         if resolved:
             y2_cols.append(resolved)
+            if resolved != requested_col:
+                resolution_warnings.append(
+                    f"Matched Y2 column '{requested_col}' -> '{resolved}'"
+                )
         else:
             resolution_warnings.append(f"Missing Y2 column: '{requested_col}'")
 

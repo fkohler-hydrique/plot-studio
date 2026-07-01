@@ -5,6 +5,8 @@ from typing import Any
 
 import pandas as pd
 
+from plot_studio.models import CsvReadReport
+
 
 @dataclass(slots=True)
 class ReadingOptions:
@@ -23,7 +25,7 @@ class SidebarSelection:
     """Current data source and read options selected in the sidebar."""
 
     uploaded_file: Any
-    csv_path: str
+    recent_csv_id: str | None
     reading_options: ReadingOptions
 
 
@@ -37,3 +39,9 @@ class MainDatasetContext:
     date_col: str | None
     date_guess: str | None
     label: str
+    read_report: CsvReadReport | None
+    date_parse_success_count: int
+    date_parse_candidate_count: int
+    date_parse_mode: str
+    date_format: str | None
+    date_parse_warning: str | None

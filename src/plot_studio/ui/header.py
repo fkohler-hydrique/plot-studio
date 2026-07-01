@@ -30,7 +30,14 @@ def render_dataset_summary(dataset: MainDatasetContext) -> None:
         st.markdown(f"#### Data: `{dataset.label or 'CSV'}`")
     with right:
         st.markdown("")
-        st.caption("Tip: Use **Dashboard** for consistent plots across different CSVs.")
+        action_col, tip_col = st.columns([0.7, 1.3], vertical_alignment="center")
+        with action_col:
+            if st.button("Reload CSV", key="reload_current_csv", width="stretch"):
+                st.rerun()
+        with tip_col:
+            st.caption(
+                "Tip: Use **Dashboard** for consistent plots across different CSVs."
+            )
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Rows", f"{len(dataset.df):,}")
@@ -42,3 +49,52 @@ def render_dataset_summary(dataset: MainDatasetContext) -> None:
     )
 
     st.divider()
+
+
+def render_read_report(dataset: MainDatasetContext) -> None:
+    """Render a compact report describing how the current CSV was interpreted."""
+    read_report = dataset.read_report
+    if read_report is None:
+        return
+
+    parse_summary = "Not used"
+    if dataset.date_col:
+        if dataset.date_parse_candidate_count > 0:
+            success_rate = (
+                dataset.date_parse_success_count / dataset.date_parse_candidate_count
+            )
+            parse_summary = (
+                f"{dataset.date_parse_success_count:,}/{dataset.date_parse_candidate_count:,} "
+                f"({success_rate:.0%})"
+            )
+        else:
+            parse_summary = "No non-empty values"
+
+    with st.container(border=True):
+        title_col, source_col = st.columns([1.4, 1], vertical_alignment="center")
+        with title_col:
+            st.caption("Read report")
+        with source_col:
+            st.caption(
+                f"{read_report.source_kind}: `{read_report.source_label or dataset.label}`"
+            )
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Separator", read_report.separator_label)
+        c2.metric("Decimal", read_report.decimal_label)
+        c3.metric("Header", read_report.header_label)
+        c4.metric("Date Parse", parse_summary)
+
+        date_details = (
+            f"Date column: `{dataset.date_col}` | Mode: `{dataset.date_parse_mode}`"
+            if dataset.date_col
+            else "Date column: `(none selected)`"
+        )
+        if dataset.date_format:
+            date_details += f" | Format override: `{dataset.date_format}`"
+        st.caption(date_details)
+
+        for warning in read_report.warnings:
+            st.warning(warning)
+        if dataset.date_parse_warning:
+            st.warning(dataset.date_parse_warning)

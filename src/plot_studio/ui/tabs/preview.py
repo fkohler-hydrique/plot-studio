@@ -10,6 +10,7 @@ from plot_studio.plotting.figures import (
     make_column_preview_figure,
 )
 from plot_studio.services.columns import normalize_colname
+from plot_studio.ui.header import render_read_report
 from plot_studio.ui.context import MainDatasetContext
 
 MINI_PLOT_AUTO_RENDER_MAX_ROWS = 5_000
@@ -64,6 +65,8 @@ def _prepare_preview_x(
 
 def render_preview_tab(dataset: MainDatasetContext) -> None:
     """Render the dataset preview tab."""
+    render_read_report(dataset)
+
     c1, c2 = st.columns([1.1, 1], vertical_alignment="top")
     with c1:
         st.markdown("##### Quick preview")
