@@ -143,30 +143,36 @@ def render_templates_tab(dataset: MainDatasetContext) -> None:
         "Import a dashboard (.json)", type=["json"], key="import_json"
     )
     if upl is not None:
-        try:
-            imported = json.loads(upl.getvalue().decode("utf-8"))
-            if not isinstance(imported, dict):
-                st.error("Imported file must be a JSON object.")
-            else:
-                imported.setdefault("id", str(uuid.uuid4()))
-                imported.setdefault(
-                    "created_at",
-                    datetime.datetime.utcnow().isoformat() + "Z",
-                )
-                imported.setdefault("plots", [])
-                validation_errors = validate_saved_config(imported)
-                if validation_errors:
-                    st.error("Imported dashboard could not be read correctly.")
-                    for error in validation_errors:
-                        st.warning(error)
-                    return
-                new_configs = [*st.session_state["saved_configs"], imported]
-                _persist_configs_with_feedback(
-                    new_configs,
-                    success_message="Imported dashboard.",
-                )
-        except Exception as exc:
-            st.error(f"Import failed: {exc}")
+        upload_signature = f"{upl.name}:{len(upl.getvalue())}"
+        if upload_signature != st.session_state.get("last_imported_json_signature"):
+            try:
+                imported = json.loads(upl.getvalue().decode("utf-8"))
+                if not isinstance(imported, dict):
+                    st.error("Imported file must be a JSON object.")
+                else:
+                    imported.setdefault("id", str(uuid.uuid4()))
+                    imported.setdefault(
+                        "created_at",
+                        datetime.datetime.utcnow().isoformat() + "Z",
+                    )
+                    imported.setdefault("plots", [])
+                    validation_errors = validate_saved_config(imported)
+                    if validation_errors:
+                        st.error("Imported dashboard could not be read correctly.")
+                        for error in validation_errors:
+                            st.warning(error)
+                        return
+                    new_configs = [*st.session_state["saved_configs"], imported]
+                    if _persist_configs_with_feedback(
+                        new_configs,
+                        success_message="Imported dashboard.",
+                    ):
+                        st.session_state["last_imported_json_signature"] = (
+                            upload_signature
+                        )
+                        st.rerun()
+            except Exception as exc:
+                st.error(f"Import failed: {exc}")
 
 
 def render_dashboard_plot_editor(
